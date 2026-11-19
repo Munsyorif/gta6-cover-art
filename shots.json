@@ -1,6 +1,1 @@
-[
-  { "name": "1-cover.jpeg", "query": "?shot=cover&photo=pier&caption=Sunset%20Heist&subtitle=A%20STORY%20IN%20EVERY%20FRAME&layout=hero&size=1920x1080&grade=100", "w": 1920, "h": 1080 },
-  { "name": "2-editor.jpeg", "query": "?shot=editor&photo=boulevard&caption=Boulevard%20Queen&subtitle=A%20STORY%20IN%20EVERY%20FRAME&layout=hero&size=1080x1080", "w": 1280, "h": 720 },
-  { "name": "3-cover.jpeg", "query": "?shot=cover&photo=boulevard&caption=Boulevard%20Queen&subtitle=A%20STORY%20IN%20EVERY%20FRAME&layout=hero&size=1080x1350", "w": 1080, "h": 1350 },
-  { "name": "4-cover.jpeg", "query": "?shot=cover&photo=pier&caption=Sunset%20Heist&subtitle=A%20STORY%20IN%20EVERY%20FRAME&layout=grid&size=1080x1080&grade=100", "w": 1080, "h": 1080 }
-]
+[{"h":720,"name":"1-cover.jpeg","query":"?shot=cover&photo=pier&layout=hero&title=SUNSET%20HEIST&size=1920x1080","w":1280},{"h":800,"name":"2-editor.jpeg","query":"?shot=editor&photo=boulevard&layout=hero&title=BOULEVARD%20QUEEN&size=1920x1080&comic=1","w":1280},{"h":1280,"name":"3-cover.jpeg","query":"?shot=cover&photo=boulevard&layout=hero&title=BOULEVARD%20QUEEN&size=1080x1350","w":1024},{"h":1080,"name":"4-cover.jpeg","query":"?shot=cover&photo=pier&layout=grid&title=SUNSET%20HEIST&size=1080x1080&comic=1","w":1080}]

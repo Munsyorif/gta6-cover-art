@@ -1,69 +1,116 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sunset Cover Maker — multi-panel poster art from your photos</title>
-<link rel="stylesheet" href="./style.css">
+<title>Sunset Cover Maker — GTA 6-style cover art, offline</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="app">
-  <section class="controls" aria-label="Cover controls">
-    <h1>Sunset Cover Maker</h1>
-    <p class="tagline">Your photos, made into a multi-panel sunset poster. Everything stays on your machine.</p>
-
-    <div class="group">
-      <h2>1 · Photos</h2>
-      <label class="file-label">Add your photos
-        <input id="photoFile" type="file" accept="image/*" multiple>
-      </label>
-      <div class="samples">
-        <span>Or try a sample:</span>
-        <button class="sample-btn" type="button" data-sample="Pier">Pier</button>
-        <button class="sample-btn" type="button" data-sample="Boulevard">Boulevard</button>
-      </div>
-      <div id="photoList" class="photo-list"></div>
+<!-- Comic style filter, applied to the user's own photos at draw time via
+     ctx.filter = 'url(#comic)'. It posterizes the colour into 5 flat levels
+     per channel and draws thick dark outlines along strong edges. No
+     artwork, logo or character is involved: the filter only re-styles the
+     photo the user loaded. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="comic" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceGraphic" result="poster">
+        <feFuncR type="discrete" tableValues="0 0.25 0.5 0.75 1"/>
+        <feFuncG type="discrete" tableValues="0 0.25 0.5 0.75 1"/>
+        <feFuncB type="discrete" tableValues="0 0.25 0.5 0.75 1"/>
+        <feFuncA type="identity"/>
+      </feComponentTransfer>
+      <feColorMatrix in="SourceGraphic" type="saturate" values="0" result="gray"/>
+      <feConvolveMatrix in="gray" order="3" kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" result="edges"/>
+      <feColorMatrix in="edges" type="luminanceToAlpha" result="edgeAlpha"/>
+      <feComponentTransfer in="edgeAlpha" result="edgeMask">
+        <feFuncA type="linear" slope="4" intercept="-0.5"/>
+      </feComponentTransfer>
+      <feFlood flood-color="#160a24" result="ink"/>
+      <feComposite in="ink" in2="edgeMask" operator="in" result="inkEdges"/>
+      <feMerge>
+        <feMergeNode in="poster"/>
+        <feMergeNode in="inkEdges"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>
+<header>
+  <h1>Sunset Cover Maker</h1>
+  <p>Turn your photo into Vice City sunset cover art — offline, nothing uploaded.</p>
+</header>
+<main>
+  <aside>
+    <h2>1 · Photo</h2>
+    <div class="btn-row">
+      <button id="uploadBtn" type="button">Upload photos</button>
+    </div>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+    <p class="hint">Or try a sample:</p>
+    <div class="btn-row">
+      <button id="sample-boulevard" type="button">Boulevard</button>
+      <button id="sample-pier" type="button">Pier</button>
     </div>
 
-    <div class="group">
-      <h2>2 · Layout</h2>
-      <div class="layout-row">
-        <button class="layout-btn active" type="button" data-layout="hero">Hero + 3</button>
-        <button class="layout-btn" type="button" data-layout="grid">Grid 2 × 2</button>
-        <button class="layout-btn" type="button" data-layout="triptych">Triptych</button>
-      </div>
-      <p class="hint">Click a panel in the preview to select it, drag to move its photo, scroll to zoom.</p>
-      <div id="panelList" class="panel-list"></div>
+    <h2>2 · Layout</h2>
+    <div class="btn-row">
+      <button type="button" data-layout="hero" class="active">Hero + 3</button>
+      <button type="button" data-layout="grid">Grid 2&times;2</button>
+      <button type="button" data-layout="triptych">Triptych</button>
     </div>
 
-    <div class="group">
-      <h2>3 · Words</h2>
-      <label>Title <input id="titleInput" type="text" maxlength="28" value="SUNSET HEIST"></label>
-      <label>Subtitle <input id="subtitleInput" type="text" maxlength="40" value="A STORY IN EVERY FRAME"></label>
-    </div>
+    <h2>3 · Caption</h2>
+    <label for="titleInput">Title</label>
+    <input id="titleInput" type="text" value="SUNSET HEIST" maxlength="40">
+    <label for="subtitleInput">Subtitle</label>
+    <input id="subtitleInput" type="text" value="VICE CITY &bull; 2026" maxlength="60">
 
-    <div class="group">
-      <h2>4 · Sunset grade</h2>
-      <label class="range-label">Strength <span id="gradeValue">80%</span>
-        <input id="gradeInput" type="range" min="0" max="100" value="80">
-      </label>
+    <h2>4 · Sunset grade + Comic style</h2>
+    <input id="gradeRange" type="range" min="0" max="100" value="70">
+    <p class="hint">Grade: <span id="gradeVal">70%</span> — warm orange, pink and purple, stronger to the right.</p>
+    <div class="btn-row">
+      <button id="comicToggle" type="button" aria-pressed="false">Comic style: off</button>
     </div>
+    <p class="hint">Comic style posterizes your photo into flat colours with thick outlines — it exports to the PNG too.</p>
 
-    <div class="group">
-      <h2>5 · Export PNG</h2>
-      <div class="export-row">
-        <button class="export-btn" type="button" data-size="1080x1080">1080 × 1080</button>
-        <button class="export-btn" type="button" data-size="1080x1350">1080 × 1350</button>
-        <button class="export-btn" type="button" data-size="1920x1080">1920 × 1080</button>
-      </div>
-      <p class="hint">Preview size: <span id="sizeLabel">Square 1080 × 1080</span></p>
-      <p id="status" role="status"></p>
+    <h2>5 · Selected panel</h2>
+    <p class="hint" id="panelLabel">Panel 1 of 4</p>
+    <label for="photoSelect">Photo in this panel</label>
+    <select id="photoSelect"></select>
+    <div class="btn-row" style="margin-top: 8px;">
+      <button type="button" data-anchor="face">Face</button>
+      <button type="button" data-anchor="center">Centre</button>
+      <button type="button" data-anchor="top">Top</button>
+      <button type="button" data-anchor="left">Left</button>
+      <button type="button" data-anchor="right">Right</button>
     </div>
-  </section>
-  <section class="preview-wrap" aria-label="Cover preview">
-    <canvas id="preview" width="1080" height="1080" aria-label="The cover preview"></canvas>
+    <label for="zoomRange">Zoom — <span id="zoomVal">1.00&times;</span></label>
+    <input id="zoomRange" type="range" min="100" max="400" value="100">
+    <p class="hint">Click a panel to select it. Drag it to pan, scroll over it to zoom.</p>
+    <div class="btn-row" style="margin-top: 8px;">
+      <button id="fillAllBtn" type="button">One photo, every panel</button>
+    </div>
+    <p class="hint">Fills all panels with the selected panel's photo, each with a different crop.</p>
+  </aside>
+
+  <section id="stage">
+    <div id="stageWrap">
+      <canvas id="poster" width="960" height="540"></canvas>
+      <div id="selBox"></div>
+    </div>
+    <div id="exportBar">
+      <span>Export PNG</span>
+      <button type="button" data-export data-w="1080" data-h="1080">1080 &times; 1080</button>
+      <button type="button" data-export data-w="1080" data-h="1350">1080 &times; 1350</button>
+      <button type="button" data-export data-w="1920" data-h="1080" class="active">1920 &times; 1080</button>
+    </div>
   </section>
 </main>
-<script type="module" src="./src/main.js"></script>
+<footer>100% offline — your photos never leave this machine. All artwork is original; no game logos, artwork or fonts.</footer>
+<noscript><p style="padding: 20px;">Sunset Cover Maker needs JavaScript to draw your cover.</p></noscript>
+<script src="src/cover.js"></script>
+<script src="src/main.js"></script>
+<script src="src/shots.js"></script>
 </body>
 </html>

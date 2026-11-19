@@ -1,224 +1,321 @@
-// Draws a multi-panel sunset cover onto a canvas 2D context. Everything here is drawn by hand:
-// the panel grid, the sunset grade, the sun and palm silhouettes, and the title band. No artwork is
-// loaded from anywhere: only the user's photos are drawn, everything else is vector work.
-
-const FRAME_RATIO = 0.012; // outer frame, as a share of the cover width
-const GUTTER_RATIO = 0.008; // gap between panels, as a share of the cover width
-const BAND_RATIO = 0.16; // title band height, as a share of the cover height
-
-/** How many photo slots a layout has. */
-export function panelCount(layout) {
-  return layout === 'triptych' ? 3 : 4;
-}
-
-/** Panel rectangles (in cover pixels) for a layout at a given cover size. */
-export function coverPanels(layout, w, h) {
-  const frame = Math.max(4, Math.round(w * FRAME_RATIO));
-  const gutter = Math.max(3, Math.round(w * GUTTER_RATIO));
-  const area = { x: frame, y: frame, w: w - frame * 2, h: h * (1 - BAND_RATIO) - frame };
-  const split = (rect, parts, horizontal) => {
-    const out = [];
-    const total = horizontal ? rect.w : rect.h;
-    const each = (total - gutter * (parts - 1)) / parts;
-    for (let i = 0; i < parts; i++) {
-      if (horizontal) out.push({ x: rect.x + i * (each + gutter), y: rect.y, w: each, h: rect.h });
-      else out.push({ x: rect.x, y: rect.y + i * (each + gutter), w: rect.w, h: each });
-    }
-    return out;
-  };
-  if (layout === 'grid') {
-    const rows = split(area, 2, false);
-    return [split(rows[0], 2, true), split(rows[1], 2, true)].flat();
-  }
-  if (layout === 'triptych') {
-    return split(area, 3, w > h);
-  }
-  // hero: one big panel plus three small ones.
-  if (w > h) {
-    const heroW = area.w * 0.6;
-    const hero = { x: area.x, y: area.y, w: heroW - gutter, h: area.h };
-    const side = { x: area.x + heroW, y: area.y, w: area.w - heroW, h: area.h };
-    return [hero, ...split(side, 3, false)];
-  }
-  const heroH = area.h * 0.62;
-  const hero = { x: area.x, y: area.y, w: area.w, h: heroH - gutter };
-  const bottom = { x: area.x, y: area.y + heroH, w: area.w, h: area.h - heroH };
-  return [hero, ...split(bottom, 3, true)];
-}
-
-/** Draws an image to cover a rectangle, with a zoom and a pan offset (both clamped so the photo always covers). */
-function drawPhotoCovered(ctx, img, rect, zoom, ox, oy) {
-  const base = Math.max(rect.w / img.naturalWidth, rect.h / img.naturalHeight);
-  const scale = base * Math.max(1, zoom);
-  const pw = img.naturalWidth * scale;
-  const ph = img.naturalHeight * scale;
-  const maxX = (pw - rect.w) / 2;
-  const maxY = (ph - rect.h) / 2;
-  const dx = Math.max(-maxX, Math.min(maxX, ox * rect.w));
-  const dy = Math.max(-maxY, Math.min(maxY, oy * rect.h));
-  ctx.drawImage(img, rect.x + (rect.w - pw) / 2 + dx, rect.y + (rect.h - ph) / 2 + dy, pw, ph);
-}
-
-/** The Vice City sunset grade: warm orange rising from the bottom into magenta, plus a vignette.
- * The warm stop at the TOP matters: without it a bright daylight photo keeps a blue sky and
- * reads as midday, not sunset. The alphas below are for grade 1; the grade slider scales them. */
-function drawSunsetGrade(ctx, rect, grade) {
-  if (grade <= 0) return;
-  const tint = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h);
-  tint.addColorStop(0, `rgba(255, 185, 115, ${0.1 * grade})`);
-  tint.addColorStop(0.45, `rgba(255, 115, 70, ${0.18 * grade})`);
-  tint.addColorStop(0.8, `rgba(195, 45, 110, ${0.36 * grade})`);
-  tint.addColorStop(1, `rgba(65, 20, 95, ${0.32 * grade})`);
-  ctx.fillStyle = tint;
-  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-  const cx = rect.x + rect.w / 2;
-  const cy = rect.y + rect.h / 2;
-  const r = Math.hypot(rect.w, rect.h) / 2;
-  const vig = ctx.createRadialGradient(cx, cy, r * 0.45, cx, cy, r);
-  vig.addColorStop(0, 'rgba(20, 5, 35, 0)');
-  vig.addColorStop(1, `rgba(20, 5, 35, ${0.32 * grade})`);
-  ctx.fillStyle = vig;
-  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-}
-
-/** A low sun and palm silhouettes on the hero panel, drawn as vectors. */
-function drawSunAndPalms(ctx, rect, grade) {
-  if (grade < 0.25) return;
-  // Sun: a small warm disc with a soft glow, blended so it brightens the photo instead of covering it.
-  const sx = rect.x + rect.w * 0.78;
-  const sy = rect.y + rect.h * 0.18;
-  const sr = rect.h * 0.075;
-  ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  const glow = ctx.createRadialGradient(sx, sy, sr * 0.1, sx, sy, sr * 4);
-  glow.addColorStop(0, `rgba(255, 214, 140, ${0.5 * grade})`);
-  glow.addColorStop(0.4, `rgba(255, 170, 110, ${0.22 * grade})`);
-  glow.addColorStop(1, 'rgba(255, 140, 90, 0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(sx - sr * 4, sy - sr * 4, sr * 8, sr * 8);
-  // Soft-edged core: opaque warm centre fading out, so the sun reads as light, not a pasted disc.
-  const core = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 1.6);
-  core.addColorStop(0, `rgba(255, 228, 165, ${0.85 * grade})`);
-  core.addColorStop(0.55, `rgba(255, 214, 140, ${0.5 * grade})`);
-  core.addColorStop(1, 'rgba(255, 210, 130, 0)');
-  ctx.fillStyle = core;
-  ctx.beginPath();
-  ctx.arc(sx, sy, sr * 1.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  // Palms: silhouettes along the panel's foot, trunks with filled drooping fronds.
-  ctx.fillStyle = 'rgba(24, 10, 40, 0.9)';
-  ctx.strokeStyle = 'rgba(24, 10, 40, 0.9)';
-  const frond = (tx, ty, angle, len) => {
-    const ex = tx + Math.cos(angle) * len;
-    const ey = ty + Math.sin(angle) * len + len * 0.32;
-    const c1x = tx + Math.cos(angle) * len * 0.55;
-    const c1y = ty + Math.sin(angle) * len * 0.55 - len * 0.24;
-    const c2x = tx + Math.cos(angle) * len * 0.45;
-    const c2y = ty + Math.sin(angle) * len * 0.45 + len * 0.06;
-    ctx.beginPath();
-    ctx.moveTo(tx, ty);
-    ctx.quadraticCurveTo(c1x, c1y, ex, ey);
-    ctx.quadraticCurveTo(c2x, c2y, tx, ty);
-    ctx.closePath();
-    ctx.fill();
-  };
-  const palm = (bx, by, height, lean) => {
-    const topX = bx + lean * height;
-    const topY = by - height;
-    ctx.lineWidth = Math.max(2.5, height * 0.05);
-    ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.quadraticCurveTo(bx + lean * height * 0.4, by - height * 0.55, topX, topY);
-    ctx.stroke();
-    const spread = [-2.75, -2.3, -1.85, -1.35, -0.9, -0.4];
-    spread.forEach((a, i) => frond(topX, topY, a, height * (0.34 + (i % 2) * 0.08)));
-  };
-  const ph = rect.h * 0.22;
-  const baseY = rect.y + rect.h - 1;
-  palm(rect.x + rect.w * 0.07, baseY, ph, 0.22);
-  palm(rect.x + rect.w * 0.16, baseY, ph * 0.68, -0.18);
-  palm(rect.x + rect.w * 0.92, baseY, ph * 0.8, -0.22);
-}
-
-/** The title band across the foot: a sunset gradient, the title in Anton, the subtitle letterspaced beneath. */
-function drawTitleBand(ctx, w, h, title, subtitle) {
-  const bandY = h * (1 - BAND_RATIO);
-  const bandH = h * BAND_RATIO;
-  const band = ctx.createLinearGradient(0, bandY, 0, h);
-  band.addColorStop(0, '#3b1155');
-  band.addColorStop(0.55, '#a92c6b');
-  band.addColorStop(1, '#ff7a3c');
-  ctx.fillStyle = band;
-  ctx.fillRect(0, bandY, w, bandH);
-  ctx.fillStyle = 'rgba(255, 210, 140, 0.85)';
-  ctx.fillRect(0, bandY, w, Math.max(2, h * 0.004));
-  const text = (title || '').trim().toUpperCase();
-  if (!text) return;
-  let size = bandH * 0.56;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const fit = () => {
-    ctx.font = `${size}px Anton, sans-serif`;
-    return ctx.measureText(text).width <= w * 0.92;
-  };
-  while (!fit() && size > 12) {
-    size -= 2;
-  }
-  ctx.font = `${size}px Anton, sans-serif`;
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(22, 8, 34, 0.9)';
-  ctx.lineWidth = Math.max(2, size * 0.07);
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-  ctx.shadowBlur = size * 0.12;
-  ctx.shadowOffsetY = size * 0.03;
-  const titleY = bandY + bandH * (subtitle.trim() ? 0.38 : 0.52);
-  ctx.strokeText(text, w / 2, titleY);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, w / 2, titleY);
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  const sub = (subtitle || '').trim().toUpperCase();
-  if (sub) {
-    const subSize = Math.max(10, size * 0.26);
-    ctx.font = `600 ${subSize}px system-ui, sans-serif`;
-    try { ctx.letterSpacing = `${Math.max(2, subSize * 0.22)}px`; } catch { /* older canvas: no letterspacing */ }
-    ctx.fillStyle = 'rgba(255, 235, 210, 0.95)';
-    ctx.fillText(sub, w / 2, bandY + bandH * 0.78);
-    try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
-  }
-}
-
-/**
- * Draws the whole cover. `state` holds layout, title, subtitle, grade (0..1), photos (loaded
- * Images) and panels: [{ photo: index into photos or -1, zoom: 1..3, ox, oy }].
+'use strict';
+/* Sunset Cover Maker — poster renderer.
+ *
+ * Draws a multi-panel GTA-style poster on any canvas: each panel shows a
+ * photo with its own crop (focal point + zoom), then a Vice City sunset
+ * grade (warm overlay wash, low sun, vignette), palm silhouettes, and the
+ * bold Anton caption across the bottom. The same drawPoster() paints the
+ * live preview and the exported PNGs, so what you see is what you get.
  */
-export function drawCoverArt(canvas, state) {
-  const ctx = canvas.getContext('2d');
-  const { width: w, height: h } = canvas;
-  ctx.fillStyle = '#f7ead2';
-  ctx.fillRect(0, 0, w, h);
-  const rects = coverPanels(state.layout, w, h);
-  rects.forEach((rect, i) => {
-    const slot = state.panels[i] || { photo: -1, zoom: 1, ox: 0, oy: 0 };
+
+(function (global) {
+  var FONT = 'Anton, "Arial Narrow", sans-serif';
+
+  /* Panel geometry for each layout, as fractions of the poster size.
+   * Returns [{x, y, w, h}] in pixels, with a small gap between panels. */
+  function panelRects(layout, W, H) {
+    var g = Math.max(2, Math.round(Math.min(W, H) * 0.012));
+    var rects = [];
+    if (layout === 'grid') {
+      var hw = (W - g) / 2;
+      var hh = (H - g) / 2;
+      rects = [
+        { x: 0, y: 0, w: hw, h: hh },
+        { x: hw + g, y: 0, w: hw, h: hh },
+        { x: 0, y: hh + g, w: hw, h: hh },
+        { x: hw + g, y: hh + g, w: hw, h: hh },
+      ];
+    } else if (layout === 'triptych') {
+      var cw = (W - 2 * g) / 3;
+      for (var i = 0; i < 3; i++) {
+        rects.push({ x: i * (cw + g), y: 0, w: cw, h: H });
+      }
+      rects.push({ x: 0, y: 0, w: 0, h: 0 }); // triptych uses three panels
+    } else {
+      // hero: big hero panel + three small ones
+      if (W >= H * 1.3) {
+        var heroW = Math.round(W * 0.62);
+        var sideX = heroW + g;
+        var sideW = W - sideX;
+        var sh = (H - 2 * g) / 3;
+        rects = [
+          { x: 0, y: 0, w: heroW, h: H },
+          { x: sideX, y: 0, w: sideW, h: sh },
+          { x: sideX, y: sh + g, w: sideW, h: sh },
+          { x: sideX, y: 2 * (sh + g), w: sideW, h: sh },
+        ];
+      } else {
+        var heroH = Math.round(H * 0.58);
+        var rowY = heroH + g;
+        var rowH = H - rowY;
+        var pw = (W - 2 * g) / 3;
+        rects = [
+          { x: 0, y: 0, w: W, h: heroH },
+          { x: 0, y: rowY, w: pw, h: rowH },
+          { x: pw + g, y: rowY, w: pw, h: rowH },
+          { x: 2 * (pw + g), y: rowY, w: pw, h: rowH },
+        ];
+      }
+    }
+    return rects;
+  }
+
+  /* Paint one photo into a panel rect, cover-fit around the panel's focal
+   * point (cx, cy in 0..1 of the photo) and zoom. The grade also lifts the
+   * photo itself: more saturation and contrast, so a flat daylight shot
+   * already reads as a warm sunset frame before the overlay wash. With
+   * comic style on, the same draw passes through the #comic SVG filter
+   * (posterized colour + thick edge outlines) after the saturation lift,
+   * so preview and export always match. */
+  function drawPhoto(ctx, img, rect, panel, grade, comic) {
+    var iw = img.naturalWidth || img.width;
+    var ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+    var base = Math.max(rect.w / iw, rect.h / ih);
+    var s = base * (panel.zoom || 1);
+    var dw = iw * s;
+    var dh = ih * s;
+    var dx = rect.x + rect.w / 2 - (panel.cx || 0.5) * dw;
+    var dy = rect.y + rect.h / 2 - (panel.cy || 0.5) * dh;
+    var g = grade == null ? 0.7 : grade;
+    var sat = 1 + 0.55 * g + (comic ? 0.25 : 0);
+    var con = 1 + 0.18 * g + (comic ? 0.10 : 0);
+    var f = 'saturate(' + sat.toFixed(2) + ') contrast(' + con.toFixed(2) + ')';
+    if (comic) f += ' url(#comic)';
     ctx.save();
     ctx.beginPath();
     ctx.rect(rect.x, rect.y, rect.w, rect.h);
     ctx.clip();
-    const entry = slot.photo >= 0 ? state.photos[slot.photo] : null;
-    const img = entry ? entry.img : null;
-    if (img) {
-      drawPhotoCovered(ctx, img, rect, slot.zoom, slot.ox, slot.oy);
-    } else {
-      const empty = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
-      empty.addColorStop(0, '#4a2358');
-      empty.addColorStop(1, '#1c0f2e');
-      ctx.fillStyle = empty;
-      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    }
-    drawSunsetGrade(ctx, rect, state.grade);
-    if (i === 0) drawSunAndPalms(ctx, rect, state.grade);
+    ctx.filter = f;
+    ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
-  });
-  drawTitleBand(ctx, w, h, state.title, state.subtitle);
-}
+  }
+
+  /* A low sun disc with a warm halo, drawn inside the hero panel. */
+  function drawSun(ctx, hero, W, H) {
+    /* A low sun tucked into the lower-right of the hero panel, near the
+     * horizon — faces sit upper-centre, so the disc never hides the subject. */
+    var cx = hero.x + hero.w * 0.82;
+    var cy = hero.y + hero.h * 0.74;
+    var r = Math.max(hero.w, hero.h) * 0.11;
+    var glow = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 2.4);
+    glow.addColorStop(0, 'rgba(255, 196, 120, 0.85)');
+    glow.addColorStop(0.35, 'rgba(255, 130, 80, 0.35)');
+    glow.addColorStop(1, 'rgba(255, 120, 80, 0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = glow;
+    ctx.fillRect(hero.x, hero.y, hero.w, hero.h);
+    ctx.restore();
+    var disc = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    disc.addColorStop(0, '#ffe9b0');
+    disc.addColorStop(0.7, '#ffb36b');
+    disc.addColorStop(1, '#ff7a5c');
+    ctx.save();
+    ctx.fillStyle = disc;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* One palm silhouette: a leaning trunk and a crown of drooping fronds.
+   * (bx, by) is the base, h the height, lean the top's sideways drift. */
+  function drawPalm(ctx, bx, by, h, lean, flip) {
+    var tx = bx + lean;
+    var ty = by - h;
+    var dir = flip ? -1 : 1;
+    ctx.save();
+    ctx.fillStyle = '#150829';
+    ctx.strokeStyle = '#150829';
+    // Trunk: a tapered shape from the base to the crown.
+    ctx.beginPath();
+    ctx.moveTo(bx - h * 0.016, by);
+    ctx.quadraticCurveTo(bx + lean * 0.4 - h * 0.02, by - h * 0.55, tx - h * 0.012, ty);
+    ctx.lineTo(tx + h * 0.012, ty);
+    ctx.quadraticCurveTo(bx + lean * 0.4 + h * 0.02, by - h * 0.55, bx + h * 0.016, by);
+    ctx.closePath();
+    ctx.fill();
+    // Fronds: seven filled leaves fanning from the crown.
+    var fronds = 7;
+    for (var i = 0; i < fronds; i++) {
+      var a = (-0.15 - i * 0.22) * Math.PI + (flip ? Math.PI : 0);
+      var len = h * (0.34 + 0.1 * Math.sin(i * 1.7));
+      var tipX = tx + Math.cos(a) * len * dir;
+      var tipY = ty + Math.sin(a) * len * 0.55 + len * 0.34;
+      var midX = tx + Math.cos(a) * len * 0.55 * dir;
+      var midY = ty + Math.sin(a) * len * 0.4 - len * 0.1;
+      var wdt = h * 0.035;
+      var nx = -Math.sin(a) * wdt * dir;
+      var ny = Math.cos(a) * wdt;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.quadraticCurveTo(midX + nx, midY + ny, tipX, tipY);
+      ctx.quadraticCurveTo(midX - nx, midY - ny, tx, ty);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Coconuts at the crown.
+    ctx.beginPath();
+    ctx.arc(tx - h * 0.02, ty + h * 0.015, h * 0.018, 0, Math.PI * 2);
+    ctx.arc(tx + h * 0.02, ty + h * 0.02, h * 0.016, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* A small gull: two short arcs. */
+  function drawBird(ctx, x, y, s) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(26, 8, 46, 0.85)';
+    ctx.lineWidth = Math.max(1.5, s * 0.08);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - s, y);
+    ctx.quadraticCurveTo(x - s * 0.4, y - s * 0.55, x, y);
+    ctx.quadraticCurveTo(x + s * 0.4, y - s * 0.55, x + s, y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* The sunset grade: a strong warm overlay wash plus a soft-light pass
+   * and a vignette, strength 0..1. This is deliberately heavy — at the
+   * default grade a plain daylight photo must already read as a sunset
+   * poster frame, not as an untouched snapshot. */
+  function drawGrade(ctx, W, H, grade) {
+    var g = grade == null ? 0.7 : grade;
+    ctx.save();
+    var wash = ctx.createLinearGradient(0, 0, 0, H);
+    wash.addColorStop(0, 'rgba(255, 122, 64, ' + (0.30 * g).toFixed(3) + ')');
+    wash.addColorStop(0.55, 'rgba(255, 64, 128, ' + (0.36 * g).toFixed(3) + ')');
+    wash.addColorStop(1, 'rgba(74, 22, 110, ' + (0.46 * g).toFixed(3) + ')');
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, W, H);
+    /* Hue shift: 'color' blend imposes the sunset hues (orange sky, pink
+     * mid-tones, purple shadows) while keeping the photo's own brightness,
+     * so a plain daylight shot stops looking like daylight. */
+    var hue = ctx.createLinearGradient(0, 0, 0, H);
+    hue.addColorStop(0, 'rgba(255, 140, 60, ' + (0.34 * g).toFixed(3) + ')');
+    hue.addColorStop(0.55, 'rgba(255, 90, 120, ' + (0.30 * g).toFixed(3) + ')');
+    hue.addColorStop(1, 'rgba(140, 50, 170, ' + (0.36 * g).toFixed(3) + ')');
+    ctx.globalCompositeOperation = 'color';
+    ctx.fillStyle = hue;
+    ctx.fillRect(0, 0, W, H);
+    var warm = ctx.createLinearGradient(0, 0, W, H);
+    warm.addColorStop(0, 'rgba(255, 150, 60, ' + (0.28 * g).toFixed(3) + ')');
+    warm.addColorStop(0.5, 'rgba(255, 80, 120, ' + (0.22 * g).toFixed(3) + ')');
+    warm.addColorStop(1, 'rgba(120, 40, 160, ' + (0.30 * g).toFixed(3) + ')');
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.fillStyle = warm;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(64, 12, 96, ' + (0.12 * g).toFixed(3) + ')';
+    ctx.fillRect(0, H * 0.55, W, H * 0.45);
+    var vig = ctx.createRadialGradient(
+      W / 2, H / 2, Math.min(W, H) * 0.42,
+      W / 2, H / 2, Math.max(W, H) * 0.75,
+    );
+    vig.addColorStop(0, 'rgba(16, 4, 32, 0)');
+    vig.addColorStop(1, 'rgba(16, 4, 32, ' + (0.22 + 0.18 * g).toFixed(3) + ')');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  /* Bold Anton caption across the bottom, over a dark legibility band. */
+  function drawCaption(ctx, W, H, title, subtitle) {
+    var pad = Math.round(W * 0.03);
+    var bandH = Math.round(H * 0.17);
+    var band = ctx.createLinearGradient(0, H - bandH, 0, H);
+    band.addColorStop(0, 'rgba(10, 4, 24, 0)');
+    band.addColorStop(1, 'rgba(10, 4, 24, 0.88)');
+    ctx.save();
+    ctx.fillStyle = band;
+    ctx.fillRect(0, H - bandH, W, bandH);
+    // Accent rule above the subtitle.
+    var rule = ctx.createLinearGradient(pad, 0, pad + W * 0.2, 0);
+    rule.addColorStop(0, '#ff7a3c');
+    rule.addColorStop(1, '#ff3d81');
+    ctx.fillStyle = rule;
+    ctx.fillRect(pad, H - bandH + Math.round(H * 0.028), Math.round(W * 0.2), Math.max(3, Math.round(H * 0.008)));
+    var sub = (subtitle || '').trim();
+    var top = (title || '').trim().toUpperCase() || 'SUNSET HEIST';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    try { ctx.letterSpacing = '0.02em'; } catch (e) { /* older canvas: no letter spacing */ }
+    if (sub) {
+      var subSize = Math.max(10, Math.round(H * 0.032));
+      ctx.font = subSize + 'px ' + FONT;
+      ctx.fillStyle = '#ffd9a0';
+      ctx.fillText(sub.toUpperCase(), pad, H - bandH + Math.round(H * 0.028) + subSize + Math.round(H * 0.02));
+    }
+    var size = Math.round(H * 0.11);
+    ctx.font = size + 'px ' + FONT;
+    var maxW = W - pad * 2;
+    while (size > Math.round(H * 0.04) && ctx.measureText(top).width > maxW) {
+      size = Math.round(size * 0.92);
+      ctx.font = size + 'px ' + FONT;
+    }
+    var baseY = H - Math.round(H * 0.035);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#160826';
+    ctx.lineWidth = Math.max(3, Math.round(size * 0.16));
+    ctx.strokeText(top, pad, baseY);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(top, pad, baseY);
+    ctx.restore();
+  }
+
+  /* Paint the whole poster. state: {layout, title, subtitle, grade,
+   * photos: [{img}], panels: [{photo, zoom, cx, cy}]} */
+  function drawPoster(ctx, W, H, state) {
+    ctx.save();
+    ctx.fillStyle = '#0d0714';
+    ctx.fillRect(0, 0, W, H);
+    var rects = panelRects(state.layout || 'hero', W, H);
+    var count = state.layout === 'triptych' ? 3 : 4;
+    for (var i = 0; i < count; i++) {
+      var panel = (state.panels && state.panels[i]) || { photo: 0, zoom: 1, cx: 0.5, cy: 0.5 };
+      var photo = state.photos && state.photos[panel.photo];
+      if (photo && photo.img) {
+        drawPhoto(ctx, photo.img, rects[i], panel, state.grade, state.comic);
+      } else {
+        ctx.fillStyle = i === 0 ? '#241533' : '#1a1026';
+        ctx.fillRect(rects[i].x, rects[i].y, rects[i].w, rects[i].h);
+      }
+    }
+    drawSun(ctx, rects[0], W, H);
+    /* The grade sits on top of everything. With comic style on, the
+     * posterized panels are already punchy, so the wash is eased a little
+     * (x0.85) to keep the cover clean instead of muddy. */
+    drawGrade(ctx, W, H, state.comic ? state.grade * 0.85 : state.grade);
+    // Birds in the hero sky.
+    drawBird(ctx, rects[0].x + rects[0].w * 0.24, rects[0].y + rects[0].h * 0.16, Math.max(10, W * 0.018));
+    drawBird(ctx, rects[0].x + rects[0].w * 0.34, rects[0].y + rects[0].h * 0.1, Math.max(8, W * 0.013));
+    // Palms: a tall one bottom-right, a shorter one along the left edge.
+    drawPalm(ctx, W * 0.995, H * 1.0, H * 0.36, -W * 0.05, true);
+    drawPalm(ctx, W * 0.005, H * 1.0, H * 0.2, W * 0.03, false);
+    drawCaption(ctx, W, H, state.title, state.subtitle);
+    // Thin poster frame.
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = Math.max(2, Math.round(Math.min(W, H) * 0.004));
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+    ctx.restore();
+  }
+
+  /* A fresh canvas with the poster painted at W x H. */
+  function makeCanvas(W, H, state) {
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    drawPoster(canvas.getContext('2d'), W, H, state);
+    return canvas;
+  }
+
+  global.SunsetCover = {
+    panelRects: panelRects,
+    drawPoster: drawPoster,
+    makeCanvas: makeCanvas,
+    layouts: ['hero', 'grid', 'triptych'],
+  };
+})(window);
