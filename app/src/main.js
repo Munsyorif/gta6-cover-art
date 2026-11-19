@@ -15,8 +15,8 @@ const LAYOUT_LABELS = {
   triptych: ['Panel 1', 'Panel 2', 'Panel 3'],
 };
 const SAMPLES = [
-  { name: 'Pier', url: 'samples/pier.jpg' },
-  { name: 'Boulevard', url: 'samples/boulevard.jpg' },
+  { name: 'Pier', url: 'samples/pier.jpeg' },
+  { name: 'Boulevard', url: 'samples/boulevard.jpeg' },
 ];
 
 const state = {
@@ -328,8 +328,8 @@ async function boot() {
       const [w, h] = scene.size.split('x').map(Number);
       state.size = { w, h };
       sizeLabel.textContent = `${w} × ${h}`;
-      const img = await loadImage(`samples/${scene.photo}.jpg`);
-      state.photos = [{ img, name: scene.photo, url: `samples/${scene.photo}.jpg` }];
+      const img = await loadImage(`samples/${scene.photo}.jpeg`);
+      state.photos = [{ img, name: scene.photo, url: `samples/${scene.photo}.jpeg` }];
       state.panels = freshPanels();
       state.panels.forEach((slot, i) => { slot.photo = 0; applyCropPreset(slot, i); });
       syncLayoutButtons();
