@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunset Cover Maker — multi-panel poster art from your photos</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main class="app">
+  <section class="controls" aria-label="Cover controls">
+    <h1>Sunset Cover Maker</h1>
+    <p class="tagline">Your photos, made into a multi-panel sunset poster. Everything stays on your machine.</p>
+
+    <div class="group">
+      <h2>1 · Photos</h2>
+      <label class="file-label">Add your photos
+        <input id="photoFile" type="file" accept="image/*" multiple>
+      </label>
+      <div class="samples">
+        <span>Or try a sample:</span>
+        <button class="sample-btn" type="button" data-sample="Pier">Pier</button>
+        <button class="sample-btn" type="button" data-sample="Boulevard">Boulevard</button>
+      </div>
+      <div id="photoList" class="photo-list"></div>
+    </div>
+
+    <div class="group">
+      <h2>2 · Layout</h2>
+      <div class="layout-row">
+        <button class="layout-btn active" type="button" data-layout="hero">Hero + 3</button>
+        <button class="layout-btn" type="button" data-layout="grid">Grid 2 × 2</button>
+        <button class="layout-btn" type="button" data-layout="triptych">Triptych</button>
+      </div>
+      <p class="hint">Click a panel in the preview to select it, drag to move its photo, scroll to zoom.</p>
+      <div id="panelList" class="panel-list"></div>
+    </div>
+
+    <div class="group">
+      <h2>3 · Words</h2>
+      <label>Title <input id="titleInput" type="text" maxlength="28" value="SUNSET HEIST"></label>
+      <label>Subtitle <input id="subtitleInput" type="text" maxlength="40" value="A STORY IN EVERY FRAME"></label>
+    </div>
+
+    <div class="group">
+      <h2>4 · Sunset grade</h2>
+      <label class="range-label">Strength <span id="gradeValue">80%</span>
+        <input id="gradeInput" type="range" min="0" max="100" value="80">
+      </label>
+    </div>
+
+    <div class="group">
+      <h2>5 · Export PNG</h2>
+      <div class="export-row">
+        <button class="export-btn" type="button" data-size="1080x1080">1080 × 1080</button>
+        <button class="export-btn" type="button" data-size="1080x1350">1080 × 1350</button>
+        <button class="export-btn" type="button" data-size="1920x1080">1920 × 1080</button>
+      </div>
+      <p class="hint">Preview size: <span id="sizeLabel">Square 1080 × 1080</span></p>
+      <p id="status" role="status"></p>
+    </div>
+  </section>
+  <section class="preview-wrap" aria-label="Cover preview">
+    <canvas id="preview" width="1080" height="1080" aria-label="The cover preview"></canvas>
+  </section>
+</main>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
