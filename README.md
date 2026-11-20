@@ -35,10 +35,10 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ## Files
 
 - `app/index.html`, `app/style.css` — the editor shell and theme.
-- `app/src/cover.js` — the poster renderer (layouts, per-panel crops, sunset grade, palms, caption).
-- `app/src/main.js` — editor wiring (upload, panel picking, pan/zoom, export).
+- `app/src/poster.js` — the poster renderer (layouts, per-panel crops, sunset grade, palms, caption).
+- `app/src/editor.js` — editor wiring (upload, panel picking, pan/zoom, export).
 - `app/src/shots.js` — deterministic screenshot hooks used to take `screenshots/`.
-- `app/samples/` — two model-made sample photos, free to use.
+- `app/samples/` — two original sample photos, generated in this session.
 - `main.ts` — copies `app/` + `screenshots/` to the output and writes `dossier.json`.
 
 Referral: [make.fun/r/egfzcnyv](https://make.fun/r/egfzcnyv)

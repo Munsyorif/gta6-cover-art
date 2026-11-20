@@ -1,12 +1,12 @@
-// Sunset Cover Maker — entry program (Node 22, standard library only).
+// Sunset Cover Maker — entry program, Node 22 standard library only.
 //
-// Hands the app in: it copies this directory's app/ and screenshots/ into
-// the output folder and writes /output/dossier.json, the summary the judge
-// reads, using the vendored make.fun library. The program runs twice in the
-// grader and both runs must write the same bytes, so nothing here depends
-// on the clock, on randomness, or on the network.
+// Hands the entry in: it copies this repository's app/ and screenshots/
+// into the output folder and writes /output/dossier.json, the summary the
+// judge reads, using the vendored make.fun library. The program runs twice
+// in the grader and both runs must write identical bytes, so nothing here
+// depends on the clock, on randomness or on the network.
 //
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-// This file's own directory is the repository root.
+// This file's own folder is the repository root.
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
